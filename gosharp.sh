@@ -134,13 +134,18 @@ func main() {
 	    "./go/bin/$BENCH_NAME"
 	else
 	    # Convert to CIL
-	    cd "$TESTDIR"
+	    pushd "$TESTDIR"
 	    "$GOPATH/bin/tardisgo" gosharp # gosharp.go
-	    haxe -main tardis.Go -cp tardis -dce full -D uselocalfunctions -cs tardis/go.cs
+	    haxe -main tardis.Go -cp tardis -dce full -D uselocalfunctions,no-compilation -cs tardis/go.cs
 	    sed 's/\\bBenchmark//' <<<$CILNAME
-	    cp ./tardis/go.cs/bin/Go.exe "$(sed 's/Benchmark//' <<<$CILNAME)"
+	    pushd ./tardis/go.cs
+	    # Replacing public methods with internal could give some gains(?), but it's not as straightforward as this. TODO?
+	    # find src -type f -exec gsed -Ei '/Equals|GetHashCode|ToString|Message/!s/public/internal/' {} \;
+	    xbuild /p:TargetFrameworkVersion="v4.0" /p:Configuration=Release Go.csproj
+	    popd
+	    cp ./tardis/go.cs/bin/Release/Go.exe "$(sed 's/Benchmark//' <<<$CILNAME)"
 	    rm -rf "$TESTDIR"
-	    cd -
+	    popd
 	fi
 	echo "OK"
     done
