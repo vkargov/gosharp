@@ -70,19 +70,22 @@ GO1SRC="$PWD/golang/test/bench/go1"
 
 # Create a separate executable for each test in the suite
 for BENCH_FILE_PATH in "$GO1SRC"/*; do
+    ITER_COUNT=1
     BENCH_FILE="$(basename $BENCH_FILE_PATH)"
-    if [ -d "$BENCH_FILE" ]; then continue; fi
-    for BENCH_NAME in $(gsed -nE 's/^\W*func (Benchmark[^a-z]\w*).*/\1/p' "$BENCH_FILE_PATH"); do	
-	echo -n "Generating test for ${BENCH_NAME} located at ${BENCH_FILE}... "
+    if [ -d "$BENCH_FILE" ]; then rm "$BENCH_FILE"; fi
+    for BENCH_NAME in $(gsed -nE 's/^\W*func (Benchmark[^a-z]\w*).*/\1/p' "$BENCH_FILE_PATH"); do
+	TIME=0
+	while [ $TIME -lt 30 ]; do # A test should run 30 seconds each
+	    echo -n "Generating test for ${BENCH_NAME} located at ${BENCH_FILE} with $ITER_COUNT iteration(s)... "
 
-	CILNAME="$CILDIR/$BENCH_NAME.exe"
-	if [ -e "$CILNAME" ]; then
-	    echo "Exists"
-	    continue
-	fi
-	
-	mkdir "$TESTDIR"
-	cat <<< "package main
+	    CILNAME="$CILDIR/$(sed 's/^Benchmark//' <<<$BENCH_NAME.exe)"
+	    # if [ -e "$CILNAME" ]; then
+	    # 	echo "Exists"
+	    # 	continue
+	    # fi
+	    
+	    mkdir "$TESTDIR"
+	    cat <<< "package main
 
 import (
        \"go1\"
@@ -91,63 +94,75 @@ import (
        \"os\"
 )
 
+func err() {
+    fmt.Println(\"Usage:\\n$BENCH_NAME.exe N\\nwhere N is the number of iterations\")
+    os.Exit(1)
+}
+
 func main() {
-    fmt.Println(\"$BENCH_NAME: a Go test from $BENCH_FILE compiled into CIL.\")
-    if len(os.Args) != 1 {
-        fmt.Println(\"$Usage:\\n$BENCH_NAME.exe N\\nwhere N is the number of iterations\")
-    }									 
-    b := testing.B {N: 1}
+    fmt.Println(\"$BENCH_NAME: a Go test from $BENCH_FILE compiled into CIL. (N: $ITER_COUNT)\")
+
+    b := testing.B{N: $ITER_COUNT}
     go1.${BENCH_NAME}(&b)
 }
 " > "$TESTDIR"/gosharp.go
 
-	# Recreate go1 dir
-	GO1PATH="$GOSRC/go1"
-	rm -rf "$GO1PATH"
-	mkdir "$GO1PATH"
+	    # Recreate go1 dir
+	    GO1PATH="$GOSRC/go1"
+	    rm -rf "$GO1PATH"
+	    mkdir "$GO1PATH"
 
-	# Fill with appropriate tests
-	cp "$BENCH_FILE_PATH" "$GO1PATH/$(sed 's/_test.go/_extest.go/' <<<$BENCH_FILE)"
-	
-	# Manually copy dependencides. DCE in Tardis is nonexistent, so can't keep the whole fat package...
-	# Otherwise Haxe will chug for good 10 minutes, and then quit with an "unknown error".
-	for t in gob gzip json template; do
-	    if [ "$BENCH_FILE" == "${t}_test.go" ]; then
-		for f in json jsondata; do
-		    cp "${GO1SRC}/${f}_test.go" "${GO1PATH}/${f}_extest.go"
-		done
-	    fi
-	done
-	if [ "$BENCH_FILE" == "revcomp_test.go" ]; then
-	    cp "${GO1SRC}/fasta_test.go" "${GO1PATH}/fasta_extest.go"
-	fi
-	if [ "$BENCH_FILE" == "parser_test.go" ]; then
-	    cp "${GO1SRC}/parserdata_test.go" "${GO1PATH}/parserdata_extest.go"
-	fi
+	    # Fill with appropriate tests
+	    cp "$BENCH_FILE_PATH" "$GO1PATH/$(sed 's/_test.go/_extest.go/' <<<$BENCH_FILE)"
 	    
-	
-	# gsed -i 's/package go1/package main/' "$TESTDIR/test.go"
-	# go build -o "go/bin/$BENCH_NAME" gosharp
-	if false; then
-	    # Test run with the standard Go
-	    go build -o "./go/bin/$BENCH_NAME" gosharp 
-	    "./go/bin/$BENCH_NAME"
-	else
-	    # Convert to CIL
-	    pushd "$TESTDIR"
-	    "$GOPATH/bin/tardisgo" gosharp # gosharp.go
-	    haxe -main tardis.Go -cp tardis -dce full -D uselocalfunctions,no-compilation -cs tardis/go.cs
-	    sed 's/\\bBenchmark//' <<<$CILNAME
-	    pushd ./tardis/go.cs
-	    # Replacing public methods with internal could give some gains(?), but it's not as straightforward as this. TODO?
-	    # find src -type f -exec gsed -Ei '/Equals|GetHashCode|ToString|Message/!s/public/internal/' {} \;
-	    xbuild /p:TargetFrameworkVersion="v4.0" /p:Configuration=Release Go.csproj
-	    popd
-	    cp ./tardis/go.cs/bin/Release/Go.exe "$(sed 's/Benchmark//' <<<$CILNAME)"
-	    rm -rf "$TESTDIR"
-	    popd
-	fi
-	echo "OK"
+	    # Manually copy dependencides. DCE in Tardis is nonexistent, so can't keep the whole fat package...
+	    # Otherwise Haxe will chug for good 10 minutes, and then quit with an "unknown error".
+	    for t in gob gzip json template; do
+		if [ "$BENCH_FILE" == "${t}_test.go" ]; then
+		    for f in json jsondata; do
+			cp "${GO1SRC}/${f}_test.go" "${GO1PATH}/${f}_extest.go"
+		    done
+		fi
+	    done
+	    if [ "$BENCH_FILE" == "revcomp_test.go" ]; then
+		cp "${GO1SRC}/fasta_test.go" "${GO1PATH}/fasta_extest.go"
+	    fi
+	    if [ "$BENCH_FILE" == "parser_test.go" ]; then
+		cp "${GO1SRC}/parserdata_test.go" "${GO1PATH}/parserdata_extest.go"
+	    fi
+	    
+	    
+	    # gsed -i 's/package go1/package main/' "$TESTDIR/test.go"
+	    # go build -o "go/bin/$BENCH_NAME" gosharp
+	    if false; then
+		# Test run with the standard Go
+		go build -o "./go/bin/$BENCH_NAME" gosharp
+		"./go/bin/$BENCH_NAME" 1
+	    else
+		# Convert to CIL
+		pushd "$TESTDIR"
+		"$GOPATH/bin/tardisgo" gosharp # gosharp.go
+		haxe -main tardis.Go -cp tardis -dce full -D uselocalfunctions,no-compilation -cs tardis/go.cs
+		pushd ./tardis/go.cs
+		# Replacing public methods with internal could give some gains(?), but it's not as straightforward as this. TODO?
+		# find src -type f -exec gsed -Ei '/Equals|GetHashCode|ToString|Message/!s/public/internal/' {} \;
+		xbuild /p:TargetFrameworkVersion="v4.0" /p:Configuration=Release Go.csproj
+		popd
+		cp ./tardis/go.cs/bin/Release/Go.exe "$CILNAME"
+		# exit
+		rm -rf "$TESTDIR"
+		popd
+	    fi
+
+	    # Test run application, measure its execution timecase 
+	    TIME="$(/usr/bin/env time -p mono $CILNAME 2>&1 | sed -nE 's/^real[^0-9]*([0-9]+).*/\1/p')"
+	    if [ "z$TIME" == "z" ]; then
+	       echo Execution/timing error, exiting.
+	       exit 1
+	    fi
+            echo t\($ITER_COUNT\) = $TIME
+	    ITER_COUNT=$((($ITER_COUNT*2)))
+	done
     done
 done
 
