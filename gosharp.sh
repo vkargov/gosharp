@@ -75,7 +75,7 @@ for BENCH_FILE_PATH in "$GO1SRC"/*; do
     if [ -d "$BENCH_FILE" ]; then rm "$BENCH_FILE"; fi
     for BENCH_NAME in $(gsed -nE 's/^\W*func (Benchmark[^a-z]\w*).*/\1/p' "$BENCH_FILE_PATH"); do
 	TIME=0
-	while [ $TIME -lt 30 ]; do # A test should run 30 seconds each
+	while [ $TIME -lt 5 ]; do # A test should run 30 seconds each
 	    echo -n "Generating test for ${BENCH_NAME} located at ${BENCH_FILE} with $ITER_COUNT iteration(s)... "
 
 	    CILNAME="$CILDIR/$(sed 's/^Benchmark//' <<<$BENCH_NAME.exe)"
@@ -100,7 +100,7 @@ func err() {
 }
 
 func main() {
-    fmt.Println(\"$BENCH_NAME: a Go test from $BENCH_FILE compiled into CIL. (N: $ITER_COUNT)\")
+    fmt.Println(\"$BENCH_NAME: a Go test from $BENCH_FILE compiled into CIL. (iteration count N: $ITER_COUNT)\")
 
     b := testing.B{N: $ITER_COUNT}
     go1.${BENCH_NAME}(&b)
@@ -146,7 +146,7 @@ func main() {
 		pushd ./tardis/go.cs
 		# Replacing public methods with internal could give some gains(?), but it's not as straightforward as this. TODO?
 		# find src -type f -exec gsed -Ei '/Equals|GetHashCode|ToString|Message/!s/public/internal/' {} \;
-		xbuild /p:TargetFrameworkVersion="v4.0" /p:Configuration=Release Go.csproj
+		xbuild /p:TargetFrameworkVersion="v4.0" /p:Configuration=Release Go.csproj /p:AssemblyName="$BENCH_NAME"
 		popd
 		cp ./tardis/go.cs/bin/Release/Go.exe "$CILNAME"
 		# exit
@@ -155,7 +155,7 @@ func main() {
 	    fi
 
 	    # Test run application, measure its execution timecase 
-	    TIME="$(/usr/bin/env time -p mono $CILNAME 2>&1 | sed -nE 's/^real[^0-9]*([0-9]+).*/\1/p')"
+	    TIME="$(/usr/bin/env time -p mono $CILNAME 2>&1 | sed -nE 's/^real.*([0-9]+)\.([0-9]+)$/\1/p')"
 	    if [ "z$TIME" == "z" ]; then
 	       echo Execution/timing error, exiting.
 	       exit 1
