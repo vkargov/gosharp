@@ -4,10 +4,9 @@ namespace GoSharp
 {
 	class Driver
 	{
-		static private string[] AssemblyList = {"BinaryTree17", "Fannkuch11", "FmtFprintfEmpty.exe", "FmtFprintfInt.exe", "FmtFprintfString.exe"};
-		static void Main()
+		static void Main(string[] args)
 		{
-			foreach (var testName in AssemblyList)
+			foreach (var testName in args)
 			{
 				AppDomain.CurrentDomain.ExecuteAssembly("./cil/" + testName + ".exe");
 			}

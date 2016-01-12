@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 
-# Convert go tests into their CIL form, where each test runs below $TIME_LIMIT
+# Convert Go tests into their CIL form, where each test runs below $TIME_LIMIT, the tests are placed into the "cil" directory.
 # The code is ugly, plenty of error checks is missing, but it does its job.
+# Note that the script was only intended to work on OS X with the Go1 suite, however, adapting it to work on other *nix systems and test suites should be a fairly easy and straightforward process.
+# On OS X, it depends on some additional command line tools, such as Go and GNU coreutils that are not shipped with the system, and need to be installed additionally, e.g. via the Brew package manager.
 
 # TODO
 # Make sure this works both on OSX and Linux (and MinGW?), without the need of any additional software.
+# Support other Go benchmarks.
 
 #set -e
-
-# set -vx
+#set -vx
 
 TIME_LIMIT=20
 
@@ -50,26 +52,6 @@ fi
 # Fill the Go1 package with test files
 # Rename files so that our non-test run would notice them
 GO1SRC="$PWD/golang/test/bench/go1"
-# cd "$GO1SRC"
-# for f in *; do
-#     # ln -sf "$PWD/$f" "$TESTDIR/$(sed 's/_test.go/_extest.go/' <<<$f)"
-#     # cp "$PWD/$f" "$TESTDIR/$(sed 's/_test.go/_extest.go/' <<<$f)"
-#     newf="$GO1PATH/$(sed 's/_test.go/_extest.go/' <<<$f)"
-#     cp "$f" "$newf"
-#     # gsed -ri 's/\b(Benchmark[^a-z]\w+)\b/Ex\1/' "$newf"
-# done
-# cd -
-
-#ln -hsf "$PWD/golang/test/bench/go1" "$GO1PATH"
-# for d in "$PWD/golang/src/"*; do
-#     if [ -d "$d" ]; then
-# 	ln -hsf "$d" "$GOSRC"
-#     fi
-# done
-
-# "Normal" tests.
-# Should come in the standard package structure, which could be included straight away by our driver.
-# stub
 
 # Create a separate executable for each test in the suite
 for BENCH_FILE_PATH in "$GO1SRC"/*; do
@@ -83,10 +65,6 @@ for BENCH_FILE_PATH in "$GO1SRC"/*; do
 	    echo -n "Generating test for ${BENCH_NAME} located at ${BENCH_FILE} with $ITER_COUNT iteration(s)... "
 
 	    CILNAME="$CILDIR/$(sed 's/^Benchmark//' <<<$BENCH_NAME.exe)"
-	    # if [ -e "$CILNAME" ]; then
-	    # 	echo "Exists"
-	    # 	continue
-	    # fi
 	    
 	    mkdir "$TESTDIR"
 	    cat <<< "package main
@@ -119,7 +97,7 @@ func main() {
 	    # Fill with appropriate tests
 	    cp "$BENCH_FILE_PATH" "$GO1PATH/$(sed 's/_test.go/_extest.go/' <<<$BENCH_FILE)"
 	    
-	    # Manually copy dependencides. DCE in Tardis is nonexistent, so can't keep the whole fat package...
+	    # Manually copy dependencides. DCE in Tardis is nonexistent(?), so can't keep the whole fat package...
 	    # Otherwise Haxe will chug for good 10 minutes, and then quit with an "unknown error".
 	    for t in gob gzip json template; do
 		if [ "$BENCH_FILE" == "${t}_test.go" ]; then
@@ -135,15 +113,12 @@ func main() {
 		cp "${GO1SRC}/parserdata_test.go" "${GO1PATH}/parserdata_extest.go"
 	    fi
 	    
-	    
-	    # gsed -i 's/package go1/package main/' "$TESTDIR/test.go"
-	    # go build -o "go/bin/$BENCH_NAME" gosharp
 	    if false; then
 		# Test run with the standard Go
 		go build -o "./go/bin/$BENCH_NAME" gosharp
 		"./go/bin/$BENCH_NAME" 1
 	    else
-		# Convert to CIL
+		# Actually convert to CIL
 		pushd "$TESTDIR"
 		"$GOPATH/bin/tardisgo" gosharp # gosharp.go
 		haxe -main tardis.Go -cp tardis -dce full -D uselocalfunctions,no-compilation -cs tardis/go.cs
@@ -158,8 +133,9 @@ func main() {
 		popd
 	    fi
 
-	    # Test run application, measure its execution timecase
-	    # TODO: need additional handling for times longer than 59 seconds
+	    # Test run application, measure its execution time
+	    # TODO: need additional handling for times longer than 59 seconds, since this implementation will just discard the minute part
+	    # TODO: The lack of error checks in this segment is especially alarming.
 	    RAW_TIMES="$(/usr/bin/env time -p gtimeout $(((TIME_LIMIT+2))) mono $CILNAME 2>&1)"
 	    echo "$RAW_TIMES"
 	    TIME="$(sed -nE 's/^user.*[^0-9]([0-9]+)\.([0-9]+)$/\1/p' <<< "$RAW_TIMES")"
@@ -186,4 +162,3 @@ func main() {
     done
 done
 
-#cp golang/test/bench/go1/binarytree_test.go "$TESTDIR/testfunc.go"
