@@ -73,10 +73,10 @@ GO1SRC="$PWD/golang/test/bench/go1"
 
 # Create a separate executable for each test in the suite
 for BENCH_FILE_PATH in "$GO1SRC"/*; do
-    ITER_COUNT=1
     BENCH_FILE="$(basename $BENCH_FILE_PATH)"
     if [ -d "$BENCH_FILE" ]; then rm "$BENCH_FILE"; fi
     for BENCH_NAME in $(gsed -nE 's/^\W*func (Benchmark[^a-z]\w*).*/\1/p' "$BENCH_FILE_PATH"); do
+	ITER_COUNT=1
 	TIME=0
 	while true; do # > 10 seconds
 
