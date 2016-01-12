@@ -162,7 +162,7 @@ func main() {
 	    # TODO: need additional handling for times longer than 59 seconds
 	    RAW_TIMES="$(/usr/bin/env time -p gtimeout $(((TIME_LIMIT+2))) mono $CILNAME 2>&1)"
 	    echo "$RAW_TIMES"
-	    TIME="$(sed -nE 's/^real.*[^0-9]([0-9]+)\.([0-9]+)$/\1/p' <<< "$RAW_TIMES")"
+	    TIME="$(sed -nE 's/^user.*[^0-9]([0-9]+)\.([0-9]+)$/\1/p' <<< "$RAW_TIMES")"
 
 	    CILNAME_="${CILNAME}_" # Backup of the previous iteration
 	    
