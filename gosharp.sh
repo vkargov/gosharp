@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Just a prototype currently...
+# Convert go tests into their CIL form, where each test runs below $TIME_LIMIT
+# The code is ugly, plenty of error checks is missing, but it does its job.
 
 # TODO
 # Make sure this works both on OSX and Linux (and MinGW?), without the need of any additional software.
@@ -8,6 +9,8 @@
 #set -e
 
 # set -vx
+
+TIME_LIMIT=20
 
 TESTPROJ=gosharp
 TESTDIR="$PWD/go/src/$TESTPROJ"
@@ -75,7 +78,8 @@ for BENCH_FILE_PATH in "$GO1SRC"/*; do
     if [ -d "$BENCH_FILE" ]; then rm "$BENCH_FILE"; fi
     for BENCH_NAME in $(gsed -nE 's/^\W*func (Benchmark[^a-z]\w*).*/\1/p' "$BENCH_FILE_PATH"); do
 	TIME=0
-	while [ $TIME -lt 10 ]; do # > 10 seconds
+	while true; do # > 10 seconds
+
 	    echo -n "Generating test for ${BENCH_NAME} located at ${BENCH_FILE} with $ITER_COUNT iteration(s)... "
 
 	    CILNAME="$CILDIR/$(sed 's/^Benchmark//' <<<$BENCH_NAME.exe)"
@@ -156,16 +160,28 @@ func main() {
 
 	    # Test run application, measure its execution timecase
 	    # TODO: need additional handling for times longer than 59 seconds
-	    RAW_TIMES="$(/usr/bin/env time -p gtimeout 20 mono $CILNAME 2>&1)"
+	    RAW_TIMES="$(/usr/bin/env time -p gtimeout $(((TIME_LIMIT+2))) mono $CILNAME 2>&1)"
 	    echo "$RAW_TIMES"
 	    TIME="$(sed -nE 's/^real.*[^0-9]([0-9]+)\.([0-9]+)$/\1/p' <<< "$RAW_TIMES")"
+
+	    CILNAME_="${CILNAME}_" # Backup of the previous iteration
+	    
+	    # Analyze the result, make appropriate adjustements.
 	    if [ "z$TIME" == "z" ]; then
-	       echo 'Test timed out(?)'.
-	       TIME=9001
-	       continue
+		TIME=9001	# timed out, supposedly
 	    fi
-            echo t\($ITER_COUNT\) = $TIME
-	    ITER_COUNT=$((($ITER_COUNT*2)))
+	    if [ $TIME -gt $TIME_LIMIT ]; then
+		if [ -a "$CILNAME_" ]; then
+		    mv "$CILNAME_" "$CILNAME" # restore the appropriate backup
+		else
+		    mv "$CILNAME" "${CILNAME}.bad" # Couldn't find the proper iteration counter, marking as bad
+		fi
+		break
+	    else
+		cp "$CILNAME" "$CILNAME_"
+		echo "t($ITER_COUNT) = $TIME <= $TIME_LIMIT, multiplying by two"
+		ITER_COUNT=$((($ITER_COUNT*2)))
+	    fi
 	done
     done
 done
